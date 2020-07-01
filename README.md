@@ -19,7 +19,7 @@ The `gradle release` task defines the following as the default release process:
 * Checkout to the working branch (optional, for GIT only, with `pushReleaseVersionBranch`)
 * Prompts you for the next version.
 * Commits the project with the new version.
-* **New in this fork: All chenges are pushed at the end, and commits are reverted on failure**
+* **New in this fork: All changes are pushed at the end, and commits are reverted on failure**
 
 Current SCM support:  [Git](http://git-scm.com/) (1.7.2 or newer)
 This fork only supports git. Open a PR if you need other SCM support.

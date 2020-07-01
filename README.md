@@ -1,8 +1,6 @@
 # gradle-release plugin
 
-[![Build Status](https://travis-ci.org/researchgate/gradle-release.svg?branch=master)](https://travis-ci.org/researchgate/gradle-release)
-[![Download](https://api.bintray.com/packages/researchgate/gradle-plugins/gradle-release/images/download.svg)](https://bintray.com/researchgate/gradle-plugins/gradle-release/_latestVersion)
-[![Gitter](https://img.shields.io/badge/chat-online-brightgreen.svg?style=flat)](https://gitter.im/researchgate/gradle-release)
+Fork of https://github.com/researchgate/gradle-release
 
 ## Introduction
 
@@ -21,35 +19,18 @@ The `gradle release` task defines the following as the default release process:
 * Checkout to the working branch (optional, for GIT only, with `pushReleaseVersionBranch`)
 * Prompts you for the next version.
 * Commits the project with the new version.
+* **New in this fork: All chenges are pushed at the end, and commits are reverted on failure**
 
-Current SCM support: [Bazaar](http://bazaar.canonical.com/en/), [Git](http://git-scm.com/) (1.7.2 or newer), [Mercurial](http://mercurial.selenic.com/), and [Subversion](http://subversion.apache.org/)
+Current SCM support:  [Git](http://git-scm.com/) (1.7.2 or newer)
+This fork only supports git. Open a PR if you need other SCM support.
 
 ## Installation
 
-The gradle-release plugin will work with Gradle 1.0M3 and beyond
-
-### Gradle 1.x and 2.0
-
-```groovy
-buildscript {
-  repositories {
-    maven {
-      url 'https://plugins.gradle.org/m2/'
-    }
-  }
-  dependencies {
-    classpath 'net.researchgate:gradle-release:2.8.1'
-  }
-}
-
-apply plugin: 'net.researchgate.release'
-```
-
-### Gradle 2.1 and higher
+The gradle-release plugin will work with Gradle 6.5 and beyond
 
 ```groovy
 plugins {
-  id 'net.researchgate.release' version '2.8.1'
+  id 'com.faendir.gradle.release' version '3.0.0'
 }
 ```
 
@@ -275,10 +256,9 @@ gradle release -Prelease.useAutomaticVersion=true -Prelease.releaseVersion=1.0.0
 
 To ask questions please use stackoverflow or github issues.
 
-* GitHub Issues: [https://github.com/researchgate/gradle-release/issues/new](https://github.com/researchgate/gradle-release/issues/new)
-* Stack Overflow: [http://stackoverflow.com/questions/tagged/gradle-release-plugin](http://stackoverflow.com/questions/tagged/gradle-release-plugin)
+* GitHub Issues: [https://github.com/F43nd1r//gradle-release/issues/new](https://github.com/researchgate/gradle-release/issues/new)
 
 To report bugs, please use the GitHub project.
 
-* Project Page: [https://github.com/researchgate/gradle-release](https://github.com/researchgate/gradle-release)
-* Reporting Bugs: [https://github.com/researchgate/gradle-release/issues](https://github.com/researchgate/gradle-release/issues)
+* Project Page: [https://github.com/F43nd1r//gradle-release](https://github.com/researchgate/gradle-release)
+* Reporting Bugs: [https://github.com/F43nd1r//gradle-release/issues](https://github.com/researchgate/gradle-release/issues)

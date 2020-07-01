@@ -3,7 +3,7 @@ package net.researchgate.release
 import org.gradle.api.Action
 import java.util.regex.Matcher
 
-class ReleaseExtension {
+open class ReleaseExtension {
     var failOnCommitNeeded = true
     var failOnPublishNeeded = true
     var failOnSnapshotDependencies = true

@@ -15,7 +15,7 @@ import org.gradle.api.Project
 import java.io.File
 import java.util.regex.Pattern
 
-class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapter(project, attributes) {
+class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(project, attributes) {
     companion object {
         const val LINE = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
         const val UNCOMMITTED = "uncommitted"
@@ -26,6 +26,9 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
     private var workingBranch: String? = null
     private var releaseBranch: String? = null
+    private val push = mutableListOf<List<String>>()
+    private var head: String? = null
+    private var tag: String? = null
 
     private lateinit var workingDirectory: File
 
@@ -49,6 +52,9 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
     override fun init() {
         workingBranch = gitCurrentBranch()
         releaseBranch = extension.pushReleaseVersionBranch ?: workingBranch
+        push.clear()
+        head = gitCurrentCommit()
+        tag = null
         if (extension.git.requireBranch != null) {
             if (workingBranch != extension.git.requireBranch) {
                 throw GradleException("Current Git branch is \"$workingBranch\" and not \"${extension.git.requireBranch}\".")
@@ -58,11 +64,9 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
     override fun checkCommitNeeded() {
         val status = gitStatus()
-
         if (status[UNVERSIONED] != null) {
             warnOrThrow(extension.failOnUnversionedFiles, listOf("You have unversioned files:", LINE, *status.getValue(UNVERSIONED).toTypedArray(), LINE).joinToString("\n"))
         }
-
         if (status[UNCOMMITTED] != null) {
             warnOrThrow(extension.failOnCommitNeeded, listOf("You have uncommitted files:", LINE, *status.getValue(UNCOMMITTED).toTypedArray(), LINE).joinToString("\n"))
         }
@@ -70,13 +74,10 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
     override fun checkUpdateNeeded() {
         exec(listOf("git", "remote", "update"), directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
-
         val status = gitRemoteStatus()
-
         if (status[AHEAD] != null) {
             warnOrThrow(extension.failOnPublishNeeded, "You have ${status[AHEAD]} local change(s) to push.")
         }
-
         if (status[BEHIND] != null) {
             warnOrThrow(extension.failOnUpdateNeeded, "You have ${status[BEHIND]} remote change(s) to pull.")
         }
@@ -84,6 +85,7 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
     override fun createReleaseTag(message: String) {
         val tagName = tagName()
+        log.info("Tag for version ${project.version} is $tagName")
         val params = mutableListOf("git", "tag", "-a", tagName, "-m", message)
         if (extension.git.signTag) {
             params.add("-s")
@@ -92,12 +94,8 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
                 directory = workingDirectory,
                 errorMessage = "Duplicate tag [$tagName] or signing error",
                 errorPatterns = listOf("already exists", "failed to sign"))
-        if (shouldPush()) {
-            exec(listOf("git", "push", "--porcelain", extension.git.pushToRemote!!, tagName) + extension.git.pushOptions,
-                    directory = workingDirectory,
-                    errorMessage = "Failed to push tag [$tagName] to remote",
-                    errorPatterns = listOf("[rejected]", "error: ", "fatal: "))
-        }
+        tag = tagName
+        push.add(listOf(extension.git.pushToRemote ?: "", tagName) + extension.git.pushOptions)
     }
 
     override fun commit(message: String) {
@@ -110,16 +108,11 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
         exec(command, directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
 
-        if (shouldPush()) {
-            var branch = gitCurrentBranch()
-            if (extension.git.pushToBranchPrefix != null) {
-                branch = "HEAD:${extension.git.pushToBranchPrefix}${branch}"
-            }
-            exec(listOf("git", "push", "--porcelain", extension.git.pushToRemote!!, branch) + extension.git.pushOptions,
-                    directory = workingDirectory,
-                    errorMessage = "Failed to push to remote",
-                    errorPatterns = listOf("[rejected]", "error: ", "fatal: "))
+        var branch = gitCurrentBranch()
+        if (extension.git.pushToBranchPrefix != null) {
+            branch = "HEAD:${extension.git.pushToBranchPrefix}${branch}"
         }
+        push.add(listOf(extension.git.pushToRemote ?: "", branch) + extension.git.pushOptions)
     }
 
     override fun add(file: File) {
@@ -129,8 +122,28 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
                 errorPatterns = listOf("error: ", "fatal: "))
     }
 
+    override fun push() {
+        if (shouldPush()) {
+            for (command in push) {
+                exec(listOf("git", "push", "--porcelain") + command,
+                        directory = workingDirectory,
+                        errorMessage = "Failed to push to remote: $command",
+                        errorPatterns = listOf("[rejected]", "error: ", "fatal: "))
+            }
+        }
+    }
+
     override fun revert() {
+        if (head != null && head != gitCurrentCommit()) {
+            log.info("Reverting commits...")
+            exec(listOf("git", "reset", "--soft", head!!), directory = workingDirectory, errorMessage = "Error reverting commits made by the release plugin.")
+        }
+        if (tag != null) {
+            log.info("Reverting tag...")
+            exec(listOf("git", "tag", "--delete", tag!!), directory = workingDirectory, errorMessage = "Error reverting tag made by the release plugin.")
+        }
         // Revert changes on gradle.properties
+        log.info("Reverting property file")
         exec(listOf("git", "checkout", findPropertiesFile().name), directory = workingDirectory, errorMessage = "Error reverting changes made by the release plugin.")
     }
 
@@ -167,7 +180,7 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
     private fun gitCurrentBranch(): String {
         val matches = exec(listOf("git", "branch", "--no-color"), directory = workingDirectory).lines().filter { it.matches(Regex("""\s*\*.*""")) }
         if (matches.isNotEmpty()) {
-            return matches[0].trim().replace(Regex("""^*\s+"""), "")
+            return matches[0].trim().replace(Regex("""^\*\s+"""), "")
         } else {
             throw GradleException("Error, this repository is empty.")
         }
@@ -175,12 +188,16 @@ class GitAdapter(project: Project, attributes: Map<String, Any>) : BaseScmAdapte
 
     private fun gitStatus(): Map<String, List<String>> {
         return exec(listOf("git", "status", "--porcelain"), directory = workingDirectory).lines().groupBy {
-            if (it.matches(Regex("""^\s*\?{2}.*"""))) {
-                UNVERSIONED
-            } else {
-                UNCOMMITTED
+            when {
+                it.matches(Regex("""^\s*\?{2}.*""")) -> UNVERSIONED
+                it.isNotBlank() -> UNCOMMITTED
+                else -> "ignore"
             }
         }
+    }
+
+    private fun gitCurrentCommit(): String {
+        return exec(listOf("git", "rev-parse", "--verify", "--porcelain", "HEAD"), directory = workingDirectory).trim()
     }
 
     private fun gitRemoteStatus(): Map<String, Int> {

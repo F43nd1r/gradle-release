@@ -8,7 +8,6 @@ import org.gradle.api.Project
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.*
 
 open class PluginHelper {
     /**
@@ -45,11 +44,11 @@ open class PluginHelper {
                 project.version = getReleaseVersion("1.0.0")
             }
             if (!useAutomaticVersion() && promptYesOrNo("Do you want to use SNAPSHOT versions inbetween releases")) {
-                attributes["usesSnapshot"] = true
+                attributes.usesSnapshot = true
             }
             if (useAutomaticVersion() || promptYesOrNo("[${propertiesFile.canonicalPath}] not found, create it with version = ${project.version}")) {
                 writeVersion(propertiesFile, "version", project.version)
-                attributes["propertiesFileCreated"] = true
+                attributes.propertiesFileCreated = true
             } else {
                 log.debug("[${propertiesFile.canonicalPath}] was not found, and user opted out of it being created. Throwing exception.")
                 throw GradleException(
@@ -64,7 +63,7 @@ open class PluginHelper {
             if (!file.isFile) {
                 file.writeText("$key=$version")
             } else {
-                file.writeText(file.readText().lines().joinToString("\n") { it.replace(Regex("^(\\s*)$key((\\s*[=|:]\\s*)|(\\s+)).+\$"), "\\1$key\\2$version") })
+                file.writeText(file.readText().lines().joinToString("\n") { it.replace(Regex("""^(\s*)$key((\s*[=|:]\s*)|(\s+)).+$"""), """$1$key$2$version""") })
             }
         } catch (e: BuildException) {
             throw GradleException("Unable to write version property.", e)
@@ -114,11 +113,13 @@ open class PluginHelper {
      * @param newVersion new version to store in the file
      */
     fun updateVersionProperty(newVersion: String) {
-        val oldVersion = DefaultGroovyMethods.asType(project.version, String::class.java)
+        val oldVersion = project.version.toString()
         if (oldVersion != newVersion) {
+            log.info("Setting version of $project to $newVersion")
             project.version = newVersion
-            attributes["versionModified"] = true
+            attributes.versionModified = true
             project.subprojects {
+                log.info("Setting version of project $it to $newVersion")
                 it.version = newVersion
             }
             val versionProperties: List<String> = extension.versionProperties.map { it } + "version"
@@ -131,7 +132,7 @@ open class PluginHelper {
     protected lateinit var project: Project
     protected lateinit var extension: ReleaseExtension
     protected val executor: Executor by lazy { Executor(log) }
-    protected var attributes: MutableMap<String, Any> = LinkedHashMap()
+    protected var attributes: Attributes = Attributes()
 
     companion object {
         /**

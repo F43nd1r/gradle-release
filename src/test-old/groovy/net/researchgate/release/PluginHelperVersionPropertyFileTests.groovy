@@ -14,7 +14,7 @@ import org.gradle.api.Project
 import org.gradle.testfixtures.ProjectBuilder
 import spock.lang.Specification
 
-public class PluginHelperVersionPropertyFileTests extends Specification {
+class PluginHelperVersionPropertyFileTests extends Specification {
 
     Project project
 

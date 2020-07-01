@@ -14,7 +14,7 @@ import org.gradle.api.Project
 import org.gradle.testfixtures.ProjectBuilder
 import spock.lang.Specification
 
-public class PluginHelperTagNameTests extends Specification {
+class PluginHelperTagNameTests extends Specification {
 
     Project project
 

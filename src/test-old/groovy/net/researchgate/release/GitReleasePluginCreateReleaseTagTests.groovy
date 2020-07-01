@@ -74,8 +74,8 @@ class GitReleasePluginCreateReleaseTagTests extends GitSpecification {
         given:
         project.version = '1.5'
         project.release.git.pushToRemote = 'myremote'
-        localGit.repository.config.setString("remote", "myremote", "url", remoteGit.repository.directory.canonicalPath);
-        localGit.repository.config.save();
+        localGit.repository.config.setString("remote", "myremote", "url", remoteGit.repository.directory.canonicalPath)
+        localGit.repository.config.save()
         when:
         project.createReleaseTag.execute()
         then:

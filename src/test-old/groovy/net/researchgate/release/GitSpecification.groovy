@@ -60,10 +60,10 @@ abstract class GitSpecification extends Specification {
         }
 
         localGit = Git.cloneRepository().setDirectory(localRepo).setURI(remoteRepo.canonicalPath).call()
-        StoredConfig config = localGit.getRepository().getConfig();
-        config.setString("user", null, "name", "Unit Test");
-        config.setString("user", null, "email", "unit@test");
-        config.save();
+        StoredConfig config = localGit.getRepository().getConfig()
+        config.setString("user", null, "name", "Unit Test")
+        config.setString("user", null, "email", "unit@test")
+        config.save()
     }
 
     def cleanupSpec() {

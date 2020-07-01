@@ -25,7 +25,7 @@ class ReleaseExtensionTests extends Specification {
         project = ProjectBuilder.builder().withName('ReleaseExtensionTest').withProjectDir(testDir).build()
         project.apply plugin: ReleasePlugin
 
-        extension = new ReleaseExtension(project, [:])
+        extension = new net.researchgate.release.ReleaseExtension.ReleaseExtension(project, [:])
         extension.scmAdapters = [TestAdapter]
     }
 

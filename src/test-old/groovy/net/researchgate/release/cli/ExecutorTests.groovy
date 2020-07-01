@@ -12,7 +12,7 @@ package net.researchgate.release.cli
 
 import spock.lang.Specification
 
-public class ExecutorTests extends Specification {
+class ExecutorTests extends Specification {
 
     Executor executor
 

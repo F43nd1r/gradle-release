@@ -14,7 +14,7 @@ import org.gradle.api.GradleException
 import org.gradle.testfixtures.ProjectBuilder
 import spock.lang.Specification
 
-public class ReleasePluginCheckSnapshotDependenciesTests extends Specification {
+class ReleasePluginCheckSnapshotDependenciesTests extends Specification {
 
     def project
 

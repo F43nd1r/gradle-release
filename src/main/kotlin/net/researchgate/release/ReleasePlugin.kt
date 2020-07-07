@@ -40,9 +40,9 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
                     "${p}unSnapshotVersion",
                     "${p}confirmReleaseVersion",
                     "${p}checkSnapshotDependencies",
-                    "${p}runBuildTasks",
                     "${p}preTagCommit",
                     "${p}createReleaseTag",
+                    "${p}runBuildTasks",
                     "${p}checkoutMergeFromReleaseBranch",
                     "${p}updateVersion",
                     "${p}commitNewVersion",
@@ -143,7 +143,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
             it.doLast { push() }
         }
         listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion, confirmReleaseVersion,
-                checkSnapshotDependencies, runBuildTasks, preTagCommit, createReleaseTag, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push).zipWithNext()
+                checkSnapshotDependencies, preTagCommit, createReleaseTag, runBuildTasks, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push).zipWithNext()
                 .forEach {
                     it.second.get().dependsOn(it.first.get())
                     it.second.get().mustRunAfter(it.first.get())

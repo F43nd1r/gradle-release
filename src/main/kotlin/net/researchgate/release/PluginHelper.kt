@@ -2,7 +2,6 @@ package net.researchgate.release
 
 import net.researchgate.release.cli.Executor
 import org.apache.tools.ant.BuildException
-import org.codehaus.groovy.runtime.DefaultGroovyMethods
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.slf4j.Logger

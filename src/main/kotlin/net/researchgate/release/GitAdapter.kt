@@ -137,14 +137,16 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
         if (head != null && head != gitCurrentCommit()) {
             log.info("Reverting commits...")
             exec(listOf("git", "reset", "--soft", head!!), directory = workingDirectory, errorMessage = "Error reverting commits made by the release plugin.")
+            head = null
         }
         if (tag != null) {
             log.info("Reverting tag...")
             exec(listOf("git", "tag", "--delete", tag!!), directory = workingDirectory, errorMessage = "Error reverting tag made by the release plugin.")
+            tag = null
         }
         // Revert changes on gradle.properties
         log.info("Reverting property file")
-        exec(listOf("git", "checkout", findPropertiesFile().name), directory = workingDirectory, errorMessage = "Error reverting changes made by the release plugin.")
+        exec(listOf("git", "checkout", "HEAD", "--", findPropertiesFile().name), directory = workingDirectory, errorMessage = "Error reverting changes made by the release plugin.")
     }
 
     override fun checkoutMergeToReleaseBranch() {

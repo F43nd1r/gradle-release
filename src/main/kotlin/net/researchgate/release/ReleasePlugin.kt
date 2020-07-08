@@ -245,9 +245,9 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
     fun unSnapshotVersion() {
         checkPropertiesFile()
         var version = project.version.toString()
-        if (version.endsWith(extension.snapshotSuffix)) {
+        if (version.contains(extension.snapshotSuffix)) {
             attributes.usesSnapshot = true
-            version = version.removeSuffix(extension.snapshotSuffix)
+            version = version.replace(extension.snapshotSuffix, "")
             updateVersionProperty(version)
         }
     }

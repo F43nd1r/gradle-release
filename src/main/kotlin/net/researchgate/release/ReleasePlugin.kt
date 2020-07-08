@@ -1,3 +1,18 @@
+/*
+ * This file is part of the gradle-release plugin.
+ *
+ * It was modified and ported to kotlin by
+ * (c) F43nd1r
+ *
+ * Original source by
+ * (c) Eric Berry
+ * (c) ResearchGate GmbH
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ *
+ */
+
 package net.researchgate.release
 
 import org.codehaus.groovy.runtime.StringGroovyMethods
@@ -275,7 +290,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         return if (useAutomaticVersion()) {
             nextVersion ?: candidateVersion
         } else {
-            readLine("Enter the next version (current one released as [${project.version.toString()}]):", nextVersion ?: candidateVersion)!!
+            readLine("Enter the next version (current one released as [${project.version}]):", nextVersion ?: candidateVersion)!!
         }
     }
 

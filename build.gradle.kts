@@ -1,3 +1,13 @@
+/*
+ * This file is part of the gradle-release plugin.
+ *
+ * (c) F43nd1r
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ *
+ */
+
 plugins {
     kotlin("jvm") version "1.3.72"
     `java-gradle-plugin`
@@ -12,14 +22,12 @@ repositories {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.7")
-    val spockVersion: String by project
     val junitVersion: String by project
-    val jgitVersion: String by project
-    val cglibVersion: String by project
-    testImplementation("org.spockframework:spock-core:$spockVersion") { exclude(group = "org.codehaus.groovy") }
-    testImplementation("junit:junit:$junitVersion")
-    testImplementation("org.eclipse.jgit:org.eclipse.jgit:$jgitVersion")
-    testImplementation("cglib:cglib-nodep:$cglibVersion")
+    val striktVersion: String by project
+    val mockkVersion: String by project
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+    testImplementation("io.strikt:strikt-core:$striktVersion")
+    testImplementation("io.mockk:mockk:$mockkVersion")
 }
 
 gradlePlugin {

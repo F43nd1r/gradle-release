@@ -46,9 +46,9 @@ open class PluginHelper {
      * @param commands     commands to execute
      * @return command "stdout" output
      */
-    fun exec(commands: List<String>, directory: File = project.rootDir, env: Map<*, *>? = null, failOnStdErr: Boolean = false,
+    fun exec(vararg commands: String, directory: File = project.rootDir, env: Map<*, *> = emptyMap<Any, Any>(), failOnStdErr: Boolean = false,
              errorPatterns: List<String> = emptyList(), errorMessage: String? = null): String {
-        return executor.exec(commands, directory, env, failOnStdErr, errorPatterns, errorMessage)
+        return executor.exec(*commands, directory = directory, env = env, failOnStdErr = failOnStdErr, errorPatterns = errorPatterns, errorMessage = errorMessage)
     }
 
     fun findPropertiesFile(): File {

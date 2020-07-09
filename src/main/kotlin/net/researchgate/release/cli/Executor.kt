@@ -22,11 +22,11 @@ import org.slf4j.Logger
 import java.io.File
 
 class Executor(private val logger: Logger? = null) {
-    fun exec(commands: List<String>, directory: File? = null, env: Map<*, *>? = null, failOnStdErr: Boolean = false,
+    fun exec(vararg commands: String, directory: File? = null, env: Map<*, *> = emptyMap<Any, Any>(), failOnStdErr: Boolean = false,
              errorPatterns: List<String> = emptyList(), errorMessage: String? = null): String {
-        val processEnv: Map<*, *> = System.getenv() + (env ?: emptyMap())
+        val processEnv: Map<*, *> = System.getenv() + env
         logger?.info("Running $commands in [${directory.toString()}]")
-        val process = Runtime.getRuntime().exec(commands.toTypedArray(), processEnv.map { "${it.key}=${it.value}" }.toTypedArray(), directory)
+        val process = Runtime.getRuntime().exec(commands, processEnv.map { "${it.key}=${it.value}" }.toTypedArray(), directory)
         val (out, err) = runBlocking {
             val out = async { process.inputStream.bufferedReader().readText() }
             val err = async { process.errorStream.bufferedReader().readText() }

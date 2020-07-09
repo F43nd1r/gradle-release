@@ -22,6 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import strikt.api.expectThat
 import strikt.assertions.contains
+import strikt.assertions.isTrue
 import java.io.File
 
 class ReleasePluginTests {
@@ -69,7 +70,7 @@ class ReleasePluginTests {
     @Test
     fun `plugin is successfully applied`() {
         val result = runGradleTask(testDir, "help")
-        expectThat(result.tasks.any { it.path.contains("release") })
+        expectThat(result.tasks.any { it.path.contains("release") }).isTrue()
     }
 
     @Test
@@ -239,6 +240,6 @@ class ReleasePluginTests {
         """.trimIndent())
         File(testDir, "settings.gradle.kts").writeText("include(\"sub\")")
         val result = runGradleTask(testDir, "help")
-        expectThat(result.tasks.any { it.path == ":sub:release" })
+        expectThat(result.tasks).any { it.path == ":sub:release" }
     }
 }

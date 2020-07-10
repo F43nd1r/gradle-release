@@ -86,7 +86,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val push = registerTask("push", "Pushes all release commits and tags to your SCM", initScmAdapter) { push() }
         val tasks = listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion, confirmReleaseVersion,
                 checkSnapshotDependencies, preTagCommit, createReleaseTag, runBuildTasks, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
-        tasks.zipWithNext().forEach { pair -> pair.second.configure { it.mustRunAfter(pair.first.get()) } }
+        tasks.forEachIndexed { index, task -> task.configure { it.mustRunAfter(*tasks.subList(0, index).toTypedArray()) } }
 
         registerTask("release", "Verify project, release, and update version to next.", *tasks.toTypedArray())
         project.gradle.taskGraph.afterTask { task ->

@@ -42,6 +42,15 @@ infix fun <T : Iterable<E>?, E> Assertion.Builder<T>.any(predicate: (E) -> Boole
             }
         }
 
+infix fun <T : Iterable<E>?, E> Assertion.Builder<T>.none(predicate: (E) -> Boolean): Assertion.Builder<T> =
+        assert("matches %s", predicate) {
+            if (it?.none<E>(predicate) == true) {
+                pass()
+            } else {
+                fail(actual = it)
+            }
+        }
+
 fun File.applyPlugin() {
     appendText("""
             plugins {

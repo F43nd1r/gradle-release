@@ -25,11 +25,13 @@ dependencies {
     val junitVersion: String by project
     val striktVersion: String by project
     val mockkVersion: String by project
+    val jgitVersion: String by project
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitVersion")
     testImplementation("io.strikt:strikt-core:$striktVersion")
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation(gradleKotlinDsl())
+    testImplementation("org.eclipse.jgit:org.eclipse.jgit:$jgitVersion")
 }
 
 tasks.withType<Test> {

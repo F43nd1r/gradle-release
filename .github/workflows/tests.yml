@@ -15,4 +15,4 @@ jobs:
       - name: Checkout gradle-release
         uses: actions/checkout@v2
       - name: run tests
-        run: ./gradlew test
+        run: ./gradlew check

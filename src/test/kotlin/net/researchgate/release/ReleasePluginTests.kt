@@ -34,37 +34,8 @@ class ReleasePluginTests {
     @BeforeEach
     internal fun setUp() {
         buildFile = File(testDir, "build.gradle.kts")
-        buildFile.writeText("""
-            plugins {
-                java
-                id("com.faendir.gradle.release")
-            }
-            
-            class TestAdapter(project: Project, attributes: net.researchgate.release.Attributes) : net.researchgate.release.BaseScmAdapter(project, attributes) {
-                override fun isSupported(directory: File): Boolean = true
-
-                override fun init() {}
-
-                override fun checkCommitNeeded() {}
-
-                override fun checkUpdateNeeded() {}
-
-                override fun createReleaseTag(message: String) {}
-
-                override fun add(file: File) {}
-
-                override fun commit(message: String) {}
-
-                override fun push() {}
-
-                override fun revert() {}
-            }
-            
-            release {
-                scmAdapters = listOf(TestAdapter::class.java)
-            }
-            
-        """.trimIndent())
+        buildFile.applyPlugin()
+        buildFile.addTestAdapter()
     }
 
     @Test

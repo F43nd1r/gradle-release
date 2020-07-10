@@ -47,12 +47,7 @@ class GitReleasePluginTests {
         executor.exec("git", "config", "--add", "user.name", "Unit Test", failOnStdErr = true, directory = localRepo)
         executor.exec("git", "config", "--add", "user.email", "unit@test", failOnStdErr = true, directory = localRepo)
 
-        buildFile.writeText("""
-            plugins {
-                java
-                id("com.faendir.gradle.release")
-            }
-        """.trimIndent())
+        buildFile.applyPlugin()
 
         val testFile = File(localRepo, "somename.txt")
         testFile.writeText("test")

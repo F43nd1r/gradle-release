@@ -208,9 +208,15 @@ class ReleasePluginTests {
                 java
                 id("com.faendir.gradle.release")
             }
+            
+            tasks.register("printTaskPaths") {
+                doLast {
+                    tasks.forEach { println(it.path) }
+                }
+            }
         """.trimIndent())
         File(testDir, "settings.gradle.kts").writeText("include(\"sub\")")
-        val result = runGradleTask(testDir, ":sub:tasks")
-        expectThat(result.output).contains("release")
+        val result = runGradleTask(testDir, "printTaskPaths")
+        expectThat(result.output).contains(":sub:release")
     }
 }

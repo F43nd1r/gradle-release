@@ -40,8 +40,8 @@ class ReleasePluginTests {
 
     @Test
     fun `plugin is successfully applied`() {
-        val result = runGradleTask(testDir, "help")
-        expectThat(result.tasks.any { it.path.contains("release") }).isTrue()
+        val result = runGradleTask(testDir, "tasks")
+        expectThat(result.output).contains("release")
     }
 
     @Test
@@ -210,7 +210,7 @@ class ReleasePluginTests {
             }
         """.trimIndent())
         File(testDir, "settings.gradle.kts").writeText("include(\"sub\")")
-        val result = runGradleTask(testDir, "help")
-        expectThat(result.tasks).any { it.path == ":sub:release" }
+        val result = runGradleTask(testDir, ":sub:tasks")
+        expectThat(result.output).contains("release")
     }
 }

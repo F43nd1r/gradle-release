@@ -36,9 +36,7 @@ open class PluginHelper {
     val log: Logger
         get() = this.project.logger ?: LoggerFactory.getLogger(this.javaClass)
 
-    fun useAutomaticVersion(): Boolean {
-        return findProperty("release.useAutomaticVersion", null, "gradle.release.useAutomaticVersion") == "true"
-    }
+    fun useAutomaticVersion(): Boolean = findProperty("release.useAutomaticVersion") == "true"
 
     /**
      * Executes command specified and retrieves its "stdout" output.
@@ -57,7 +55,7 @@ open class PluginHelper {
             if (!isVersionDefined) {
                 project.version = getReleaseVersion("1.0.0")
             }
-            if (!useAutomaticVersion() && promptYesOrNo("Do you want to use SNAPSHOT versions inbetween releases")) {
+            if (!useAutomaticVersion() && promptYesOrNo("Do you want to use SNAPSHOT versions in between releases")) {
                 attributes.usesSnapshot = true
             }
             if (useAutomaticVersion() || promptYesOrNo("[${propertiesFile.canonicalPath}] not found, create it with version = ${project.version}")) {
@@ -72,7 +70,7 @@ open class PluginHelper {
         return propertiesFile
     }
 
-    protected fun writeVersion(file: File, key: String?, version: Any?) {
+    private fun writeVersion(file: File, key: String?, version: Any?) {
         try {
             if (!file.isFile) {
                 file.writeText("$key=$version")
@@ -95,29 +93,13 @@ open class PluginHelper {
         }
     }
 
-    fun tagName(): String {
-        return extension.tagTemplate.replace(Regex.fromLiteral("\$version"), project.version.toString()).replace(Regex.fromLiteral("\$name"), project.name)
-    }
+    fun tagName(): String = extension.tagTemplate.replace(Regex.fromLiteral("\$version"), project.version.toString()).replace(Regex.fromLiteral("\$name"), project.name)
 
-    @JvmOverloads
-    fun findProperty(key: String, defaultVal: String? = null, deprecatedKey: String? = null): String? {
-        val property1: String? = System.getProperty(key)
-        var property: String? = property1 ?: if (project.hasProperty(key)) project.property(key)!!.toString() else null
-        if (property == null && deprecatedKey != null) {
-            val property2: String? = System.getProperty(deprecatedKey)
-            property = property2 ?: if (project.hasProperty(deprecatedKey)) project.property(deprecatedKey)!!.toString() else null
-            if (property != null) {
-                log.warn("You are using the deprecated parameter '$deprecatedKey'. Please use the new parameter '$key'. The deprecated parameter will be removed in 3.0")
-            }
-        }
-        return property ?: defaultVal
-    }
+    fun findProperty(key: String): String? = System.getProperty(key) ?: if (project.hasProperty(key)) project.property(key)!!.toString() else null
 
     fun getReleaseVersion(candidateVersion: String = project.version.toString()): String {
-        val releaseVersion = findProperty("release.releaseVersion", null, "releaseVersion")
-        return if (useAutomaticVersion()) {
-            releaseVersion ?: candidateVersion
-        } else readLine("This release version:", releaseVersion ?: candidateVersion)!!
+        val releaseVersion = findProperty("release.releaseVersion")
+        return getIf(!useAutomaticVersion()) { readLine("This release version: [${releaseVersion ?: candidateVersion}]") } ?: releaseVersion ?: candidateVersion
     }
 
     /**
@@ -129,23 +111,18 @@ open class PluginHelper {
     fun updateVersionProperty(newVersion: String) {
         val oldVersion = project.version.toString()
         if (oldVersion != newVersion) {
-            log.info("Setting version of $project to $newVersion")
             project.version = newVersion
             attributes.versionModified = true
-            project.subprojects {
-                log.info("Setting version of project $it to $newVersion")
-                it.version = newVersion
-            }
+            project.subprojects { it.version = newVersion }
             val versionProperties: List<String> = extension.versionProperties.map { it } + "version"
-            versionProperties.forEach {
-                writeVersion(findPropertiesFile(), it, project.version)
-            }
+            val propertiesFile = findPropertiesFile()
+            versionProperties.forEach { writeVersion(propertiesFile, it, project.version) }
         }
     }
 
     protected lateinit var project: Project
     protected lateinit var extension: ReleaseExtension
-    protected val executor: Executor by lazy { Executor(log) }
+    private val executor: Executor by lazy { Executor(log) }
     protected var attributes: Attributes = Attributes()
 
     companion object {
@@ -153,25 +130,22 @@ open class PluginHelper {
          * Reads user input from the console.
          *
          * @param message      Message to display
-         * @param defaultValue (optional) default value to display
          * @return User input entered or default value if user enters no data
          */
         @JvmStatic
-        protected fun readLine(message: String, defaultValue: String? = null): String? {
-            val fullMessage = "$PROMPT $message${if (!defaultValue.isNullOrEmpty()) " [$defaultValue] " else ""}"
+        protected fun readLine(message: String): String? {
+            val fullMessage = "$PROMPT $message"
             if (System.console() != null) {
-                val line: String? = System.console().readLine(fullMessage)
-                return if (line.isNullOrBlank()) defaultValue else line
+                return System.console().readLine(fullMessage)?.ifBlank { null }
             }
             println("$fullMessage (WAITING FOR INPUT BELOW)")
-            val line: String? = System.`in`.bufferedReader().readLine()
-            return if (line.isNullOrBlank()) defaultValue else line
+            return System.`in`.bufferedReader().readLine()?.ifBlank { null }
         }
 
         private fun promptYesOrNo(message: String, defaultValue: Boolean = false): Boolean {
             val defaultStr = if (defaultValue) "Y" else "n"
-            val consoleVal = readLine("$message (Y|n)", defaultStr)
-            return consoleVal?.toLowerCase()?.startsWith("y") ?: defaultValue
+            val consoleVal = readLine("$message (Y|n)") ?: defaultStr
+            return consoleVal.toLowerCase().startsWith("y")
         }
 
         private val LINE_SEP = System.getProperty("line.separator")

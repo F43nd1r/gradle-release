@@ -27,6 +27,7 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
         const val UNVERSIONED = "unversioned"
         const val AHEAD = "ahead"
         const val BEHIND = "behind"
+        val BASIC_ERROR_PATTERNS = listOf("error: ", "fatal: ")
     }
 
     private var workingBranch: String? = null
@@ -78,12 +79,12 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
     }
 
     override fun checkUpdateNeeded() {
-        exec("git", "remote", "update", directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
+        exec("git", "remote", "update", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
         val status = gitRemoteStatus()
-        if (status[AHEAD] != null) {
+        if (status[AHEAD] != 0) {
             warnOrThrow(extension.failOnPublishNeeded, "You have ${status[AHEAD]} local change(s) to push.")
         }
-        if (status[BEHIND] != null) {
+        if (status[BEHIND] != 0) {
             warnOrThrow(extension.failOnUpdateNeeded, "You have ${status[BEHIND]} remote change(s) to pull.")
         }
     }
@@ -95,9 +96,7 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
         if (extension.git.signTag) {
             params.add("-s")
         }
-        exec(*params.toTypedArray(),
-                directory = workingDirectory,
-                errorMessage = "Duplicate tag [$tagName] or signing error",
+        exec(*params.toTypedArray(), directory = workingDirectory, errorMessage = "Duplicate tag [$tagName] or signing error",
                 errorPatterns = listOf("already exists", "failed to sign"))
         tag = tagName
         push.add(listOf(extension.git.pushToRemote ?: "", tagName) + extension.git.pushOptions)
@@ -106,34 +105,26 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
     override fun commit(message: String) {
         val command = mutableListOf("git", "commit", "-m", message)
         if (extension.git.commitVersionFileOnly) {
-            command.add(project.file(extension.versionPropertyFile).toString())
+            command.add(project.file(extension.versionPropertyFile).canonicalPath)
         } else {
             command.add("-a")
         }
 
-        exec(*command.toTypedArray(), directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
+        exec(*command.toTypedArray(), directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
 
-        var branch = gitCurrentBranch()
-        if (extension.git.pushToBranchPrefix != null) {
-            branch = "HEAD:${extension.git.pushToBranchPrefix}${branch}"
-        }
-        push.add(listOf(extension.git.pushToRemote ?: "", branch) + extension.git.pushOptions)
+        val branch = (extension.git.pushToBranchPrefix?.let { "HEAD:$it" } ?: "") + gitCurrentBranch()
+        push.add(listOfNotNull(extension.git.pushToRemote, branch) + extension.git.pushOptions)
     }
 
     override fun add(file: File) {
-        exec("git", "add", file.path,
-                directory = workingDirectory,
-                errorMessage = "Error adding file ${file.name}",
-                errorPatterns = listOf("error: ", "fatal: "))
+        exec("git", "add", file.path, directory = workingDirectory, errorMessage = "Error adding file ${file.name}", errorPatterns = BASIC_ERROR_PATTERNS)
     }
 
     override fun push() {
         if (shouldPush()) {
             for (command in push) {
-                exec("git", "push", "--porcelain", *command.toTypedArray(),
-                        directory = workingDirectory,
-                        errorMessage = "Failed to push to remote: $command",
-                        errorPatterns = listOf("[rejected]", "error: ", "fatal: "))
+                exec("git", "push", "--porcelain", *command.toTypedArray(), directory = workingDirectory, errorMessage = "Failed to push to remote: $command",
+                        errorPatterns = BASIC_ERROR_PATTERNS + "[rejected]")
             }
         }
     }
@@ -163,25 +154,23 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
     }
 
     private fun checkoutMerge(fromBranch: String, toBranch: String) {
-        exec("git", "fetch", directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
-        exec("git", "checkout", toBranch, directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: "))
-        exec("git", "merge", "--no-ff", "--no-commit", fromBranch, directory = workingDirectory, errorPatterns = listOf("error: ", "fatal: ", "CONFLICT"))
+        exec("git", "fetch", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
+        exec("git", "checkout", toBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
+        exec("git", "merge", "--no-ff", "--no-commit", fromBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS + "CONFLICT")
     }
 
     private fun shouldPush(): Boolean {
-        var shouldPush = false
         if (extension.git.pushToRemote != null) {
-            exec("git", "remote", directory = workingDirectory).lines().forEach { line ->
+            val shouldPush = exec("git", "remote", directory = workingDirectory).lines().any { line ->
                 val matcher = Pattern.compile("^\\s*(.*)\\s*$").matcher(line)
-                if (matcher.matches() && matcher.group(1) == extension.git.pushToRemote) {
-                    shouldPush = true
-                }
+                matcher.matches() && matcher.group(1) == extension.git.pushToRemote
             }
             if (!shouldPush && extension.git.pushToRemote != "origin") {
                 throw GradleException("Could not push to remote ${extension.git.pushToRemote} as repository has no such remote")
             }
+            return shouldPush
         }
-        return shouldPush
+        return false
     }
 
     private fun gitCurrentBranch(): String {
@@ -198,7 +187,7 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
             when {
                 it.matches(Regex("""^\s*\?{2}.*""")) -> UNVERSIONED
                 it.isNotBlank() -> UNCOMMITTED
-                else -> "ignore"
+                else -> "other"
             }
         }
     }
@@ -209,17 +198,7 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
 
     private fun gitRemoteStatus(): Map<String, Int> {
         val branchStatus = exec("git", "status", "--porcelain", "-b", directory = workingDirectory).lines()[0]
-        val aheadMatcher = Pattern.compile(""".*ahead (\d+).*""").matcher(branchStatus)
-        val behindMatcher = Pattern.compile(""".*behind (\d+).*""").matcher(branchStatus)
-
-        val remoteStatus = mutableMapOf<String, Int>()
-
-        if (aheadMatcher.matches()) {
-            remoteStatus[AHEAD] = aheadMatcher.group(1).toInt()
-        }
-        if (behindMatcher.matches()) {
-            remoteStatus[BEHIND] = behindMatcher.group(1).toInt()
-        }
-        return remoteStatus
+        return mapOf(AHEAD to (Pattern.compile(""".*ahead (\d+).*""").matcher(branchStatus).takeIf { it.matches() }?.group(1)?.toInt() ?: 0),
+                BEHIND to (Pattern.compile(""".*behind (\d+).*""").matcher(branchStatus).takeIf { it.matches() }?.group(1)?.toInt() ?: 0))
     }
 }

@@ -28,6 +28,13 @@ This fork only supports git. Open a PR if you need other SCM support.
 
 The gradle-release plugin will work with Gradle 6.5 and beyond
 
+kotlin:
+```kotlin
+plugins {
+  id("com.faendir.gradle.release") version "3.2.0"
+}
+```
+groovy:
 ```groovy
 plugins {
   id 'com.faendir.gradle.release' version '3.2.0'

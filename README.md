@@ -30,7 +30,7 @@ The gradle-release plugin will work with Gradle 6.5 and beyond
 
 ```groovy
 plugins {
-  id 'com.faendir.gradle.release' version '3.0.0'
+  id 'com.faendir.gradle.release' version '3.2.0'
 }
 ```
 

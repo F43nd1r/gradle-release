@@ -16,9 +16,12 @@
 package net.researchgate.release
 
 import org.gradle.api.Action
+import org.gradle.api.Project
+import org.gradle.api.Task
+import java.util.concurrent.Callable
 import java.util.regex.Matcher
 
-open class ReleaseExtension {
+open class ReleaseExtension(private val project: Project) {
     var failOnCommitNeeded = true
     var failOnPublishNeeded = true
     var failOnSnapshotDependencies = true
@@ -34,7 +37,7 @@ open class ReleaseExtension {
     var tagTemplate: String = "\$version"
     var versionPropertyFile = "gradle.properties"
     var versionProperties: List<String> = emptyList()
-    var buildTasks: List<*> = listOf("build")
+    var buildTasks: List<Any> = listOf(Callable<List<Task>> { project.allprojects.mapNotNull { it.tasks.findByName("build") } })
     var ignoredSnapshotDependencies: List<String> = emptyList()
     var versionPatterns: Map<String, (Matcher) -> String> = mapOf("""(\d+)([^\d]*$)""" to { m -> m.replaceAll("${(m.group(1).toInt()) + 1}${m.group(2)}") })
     var scmAdapters: List<Class<out BaseScmAdapter>> = listOf(GitAdapter::class.java)

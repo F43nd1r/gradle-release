@@ -41,7 +41,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
 
     override fun apply(project: Project) {
         this.project = project
-        extension = project.extensions.create("release", ReleaseExtension::class.java)
+        extension = project.extensions.create("release", ReleaseExtension::class.java, project)
         val preCommitText: String? = findProperty("release.preCommitText")
         if (preCommitText?.isNotEmpty() == true) {
             extension.preCommitText = preCommitText
@@ -60,20 +60,13 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val confirmReleaseVersion = registerTask("confirmReleaseVersion", "Prompts user for this release version. Allows for alpha or pre releases.") { confirmReleaseVersion() }
         val checkSnapshotDependencies = registerTask("checkSnapshotDependencies", "Checks to see if your project has any SNAPSHOT dependencies.") { checkSnapshotDependencies() }
         val beforeReleaseBuild = registerTask("beforeReleaseBuild", "Runs immediately before the build when doing a release")
-        val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release")
-        project.afterEvaluate {
-            val buildTasks = extension.buildTasks
-            if (buildTasks.isNotEmpty()) {
-                project.tasks.named(buildTasks.first().toString()).configure { it.mustRunAfter(beforeReleaseBuild.get()) }
-                afterReleaseBuild.configure { it.mustRunAfter(buildTasks.last().toString()) }
-            }
-        }
+        val runReleaseBuild = registerTask("runReleaseBuild", "Runs the build when doing a release", beforeReleaseBuild, *extension.buildTasks.toTypedArray())
+        val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release", runReleaseBuild)
         val runBuildTasks = project.tasks.register("runBuildTasks", GradleBuild::class.java) {
             it.group = RELEASE_GROUP
             it.description = "Runs the build process in a separate gradle run."
             it.startParameter = project.gradle.startParameter.newInstance()
-            val p = project.path.let { path -> if (!path.endsWith(Project.PATH_SEPARATOR)) path + Project.PATH_SEPARATOR else path }
-            it.tasks = listOf(beforeReleaseBuild.get().path) + extension.buildTasks.map { task -> "${p}$task" } + afterReleaseBuild.get().path
+            it.tasks = listOf(beforeReleaseBuild.get().path) + runReleaseBuild.get().path + afterReleaseBuild.get().path
         }
         val preTagCommit = registerTask("preTagCommit", "Commits any changes made by the Release plugin - eg. If the unSnapshotVersion task was executed",
                 initScmAdapter) { preTagCommit() }

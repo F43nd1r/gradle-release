@@ -36,7 +36,7 @@ class PluginHelperVersionPropertyFileTests {
     internal fun setUp() {
         project = ProjectBuilder.builder().withName("ReleasePluginTest").withProjectDir(testDir).build()
         project.version = "1.1"
-        extension = project.extensions.create("release", ReleaseExtension::class.java)
+        extension = project.extensions.create("release", ReleaseExtension::class.java, project)
         helper = object : PluginHelper() {
             init {
                 extension = this@PluginHelperVersionPropertyFileTests.extension

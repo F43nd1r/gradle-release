@@ -14,7 +14,10 @@ plugins {
     idea
     id("com.gradle.plugin-publish") version "0.12.0"
     `maven-publish`
+    id("com.faendir.gradle.release") version "3.3.1"
 }
+
+group="com.faendir.gradle"
 
 repositories {
     jcenter()
@@ -71,5 +74,13 @@ publishing {
             from(components["java"])
         }
     }
+}
+
+release {
+    tagTemplate = "v\$version"
+}
+
+tasks.named("afterReleaseBuild").configure {
+    dependsOn("publishPlugins")
 }
 

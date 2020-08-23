@@ -9,14 +9,14 @@ The `gradle release` task defines the following as the default release process:
 
 * The plugin checks for any un-committed files (Added, modified, removed, or un-versioned).
 * Checks for any incoming or outgoing changes.
-* Checkout to the release branch and merge from the working branch (optional, for GIT only, with `pushReleaseVersionBranch`)
+* Checkout to the release branch and merge from the working branch (optional with `pushReleaseVersionBranch`)
 * Removes the SNAPSHOT flag on your project's version (If used)
 * Prompts you for the release version.
 * Checks if your project is using any SNAPSHOT dependencies
 * Will `build` your project.
 * Commits the project if SNAPSHOT was being used.
 * Creates a release tag with the current version.
-* Checkout to the working branch (optional, for GIT only, with `pushReleaseVersionBranch`)
+* Checkout to the working branch (optional with `pushReleaseVersionBranch`)
 * Prompts you for the next version.
 * Commits the project with the new version.
 * **New in this fork: All changes are pushed at the end, and commits are reverted on failure**
@@ -31,13 +31,13 @@ The gradle-release plugin will work with Gradle 6.5 and beyond
 kotlin:
 ```kotlin
 plugins {
-  id("com.faendir.gradle.release") version "3.2.0"
+  id("com.faendir.gradle.release") version "3.3.1"
 }
 ```
 groovy:
 ```groovy
 plugins {
-  id 'com.faendir.gradle.release' version '3.2.0'
+  id 'com.faendir.gradle.release' version '3.3.1'
 }
 ```
 
@@ -46,12 +46,12 @@ understand the behavior and limitations when using the new syntax to declare plu
 
 ## Usage
 
-After you have your `build.gradle` file configured, simply run: `gradle release` and follow the on-screen instructions.
+After you have your `build.gradle.kts` file configured, simply run: `gradle release` and follow the on-screen instructions.
 
 ### Configuration
 
 As described above, the plugin will check for un-committed files and SNAPSHOT dependencies.
-By default the plugin will fail when any un-committed, or SNAPSHOT dependencies are found.
+By default, the plugin will fail when any un-committed files or SNAPSHOT dependencies are found.
 
 Below are some properties of the Release Plugin Convention that can be used to make your release process more lenient
 
@@ -74,7 +74,7 @@ Below are some properties of the Release Plugin Convention that can be used to m
 	<tr>
 		<td>failOnSnapshotDependencies</td>
 		<td>true</td>
-		<td>Fail when the project has dependencies on SNAPSHOT versions unless those SNAPSHOT dependencies have been defined as <i>'ignoredSnapshotDependencies'</i> using the syntax '$group:$name'</td>
+		<td>Fail when the project has dependencies on SNAPSHOT versions unless those SNAPSHOT dependencies have been defined as <i>ignoredSnapshotDependencies</i> using the syntax "$group:$name"</td>
 	</tr>
 	<tr>
 		<td>failOnUnversionedFiles</td>
@@ -94,7 +94,7 @@ Below are some properties of the Release Plugin Convention that can be used to m
 	<tr>
 		<td>pushReleaseVersionBranch</td>
 		<td>false</td>
-		<td>(GIT only) If set to the name of a branch, the `release` task will commit the release on this branch, and the next version on the working branch.</td>
+		<td>If set to the name of a branch, the `release` task will commit the release on this branch, and the next version on the working branch.</td>
 	</tr>
 </table>
 
@@ -108,7 +108,7 @@ Below are some properties of the Release Plugin Convention that can be used to c
 	<tr>
 		<td>tagTemplate</td>
 		<td>$version</td>
-		<td>The string template which is used to generate the tag name. Possible variables are $version and $name. Example: '$name-$version' will result in "myproject-1.1.0". (Always ensure to use single-quotes, otherwise `$` is interpreted already in your build script)</td>
+		<td>The string template which is used to generate the tag name. Possible variables are $version and $name. Example: "\$name-\$version" will result in "myproject-1.1.0".</td>
 	</tr>
 	<tr>
 		<td>preCommitText</td>
@@ -123,7 +123,7 @@ Below are some properties of the Release Plugin Convention that can be used to c
 	<tr>
 		<td>tagCommitMessage</td>
 		<td>[Gradle Release Plugin] - creating tag: </td>
-		<td>The commit message used when creating the tag. Not used with BZR projects</td>
+		<td>The commit message used when creating the tag.</td>
 	</tr>
 	<tr>
 		<td>newVersionCommitMessage</td>
@@ -149,13 +149,13 @@ Below are some properties of the Release Plugin Convention that are specific to 
 		<td>Git</td>
 		<td>requireBranch</td>
 		<td>master</td>
-		<td>Defines the branch which releases must be done off of. Eg. set to `release` to require releases are done on the `release` branch (or use a regular expression to allow releases from multiple branches, e.g. `/release|master/`). Set to '' to ignore.</td>
+		<td>Defines the branch which releases must be done off of. Eg. set to `release` to require releases are done on the `release` branch (or use a regular expression to allow releases from multiple branches, e.g. `/release|master/`). Set to "" to ignore.</td>
 	</tr>
 	<tr>
 		<td>Git</td>
 		<td>pushOptions</td>
 		<td>{empty}</td>
-		<td>Defines an array of options to add to the git adapter during a push.  This could be useful to have the vc hooks skipped during a release. Example `pushOptions = ["--no-verify"]`</td>
+		<td>Defines an array of options to add to the git adapter during a push.  This could be useful to have the vc hooks skipped during a release. Example `pushOptions = listOf("--no-verify")`</td>
 	</tr>
 	<tr>
 	    <td>Git</td>
@@ -167,7 +167,7 @@ Below are some properties of the Release Plugin Convention that are specific to 
 
 To set any of these properties to false, add a "release" configuration to your project's ```build.gradle``` file. Eg. To ignore un-versioned files, you would add the following to your ```build.gradle``` file:
 
-```
+```kotlin
 release {
   failOnUnversionedFiles = false
 }
@@ -175,7 +175,7 @@ release {
 
 Eg. To ignore upstream changes, change 'failOnUpdateNeeded' to false:
 
-```
+```kotlin
 release {
   failOnUpdateNeeded = false
 }
@@ -183,7 +183,7 @@ release {
 
 This are all possible configuration options and its default values:
 
-```
+```kotlin
 release {
     failOnCommitNeeded = true
     failOnPublishNeeded = true
@@ -191,39 +191,26 @@ release {
     failOnUnversionedFiles = true
     failOnUpdateNeeded = true
     revertOnFail = true
-    preCommitText = ''
-    preTagCommitMessage = '[Gradle Release Plugin] - pre tag commit: '
-    tagCommitMessage = '[Gradle Release Plugin] - creating tag: '
-    newVersionCommitMessage = '[Gradle Release Plugin] - new version commit: '
-    tagTemplate = '${version}'
-    versionPropertyFile = 'gradle.properties'
-    versionProperties = []
-    snapshotSuffix = '-SNAPSHOT'
-    buildTasks = ['build']
-    ignoredSnapshotDependencies = []
-    versionPatterns = [
-        /(\d+)([^\d]*$)/: { Matcher m, Project p -> m.replaceAll("${(m[0][1] as int) + 1}${m[0][2]}") }
-    ]
-    pushReleaseVersionBranch = false
-    scmAdapters = [
-        net.researchgate.release.GitAdapter,
-        net.researchgate.release.SvnAdapter,
-        net.researchgate.release.HgAdapter,
-        net.researchgate.release.BzrAdapter
-    ]
+    preCommitText = ""
+    preTagCommitMessage = "[Gradle Release Plugin] - pre tag commit: "
+    tagCommitMessage = "[Gradle Release Plugin] - creating tag: "
+    newVersionCommitMessage = "[Gradle Release Plugin] - new version commit: "
+    tagTemplate = "\$version"
+    versionPropertyFile = "gradle.properties"
+    versionProperties = emptyList()
+    snapshotSuffix = "-SNAPSHOT"
+    buildTasks = listOf(Callable<List<Task>> { project.allprojects.mapNotNull { it.tasks.findByName("build") } }) //all tasks named "build" in this project and its subprojects
+    ignoredSnapshotDependencies = emptyList()
+    versionPatterns = mapOf("""(\d+)([^\d]*$)""" to { m -> "${m.groupValues[1].toInt() + 1}${m.groupValues[2]}" })
+    pushReleaseVersionBranch = null
+    scmAdapters = listOf(GitAdapter::class.java)
 
     git {
-        requireBranch = 'master'
-        pushToRemote = 'origin'
-        pushToBranchPrefix = ''
+        requireBranch = "master"
+        pushToRemote = "origin"
+        pushToBranchPrefix = ""
         commitVersionFileOnly = false
         signTag = false
-    }
-
-    svn {
-        username = null
-        password = null
-        pinExternals = false   // allows to pin the externals when tagging, requires subversion client >= 1.9.0
     }
 }
 ```
@@ -234,19 +221,27 @@ To add a step to the release process is very easy. Gradle provides a very nice m
 
 For example, if we wanted to make sure `uploadArchives` is called and succeeds after the build with the release version has finished, we would just add the `uploadArchives` task as a dependency of the `afterReleaseBuild` task:
 
-```groovy
-afterReleaseBuild.dependsOn uploadArchives
+```kotlin
+tasks.named("afterReleaseBuild").configure {
+    dependsOn("uploadArchives")
+}
 ```
 
 ### Multi-Project Builds
 
 Support for [multi-project builds](http://gradle.org/docs/current/userguide/multi_project_builds.html) isn't complete, but will work given some assumptions. The gradle-release plugin assumes and expects that only one version control system is used by both root and sub projects.
 
+#### All projects share a version
+
+Apply the plugin only to the root project. All subprojects will be built automatically. Make sure you register all publish type tasks from subprojects as seen above.
+
+#### Different versions per project
+
 Apply the plugin separately to each subproject that you wish to release. Release using a qualified task name, e.g.:
 
 ```bash
-./gradlew :sub:release # release a subproject named "sub"
-./gradlew :release # release the root project
+./gradlew :sub1:release # release a subproject named "sub1"
+./gradlew :sub2:release # release a subproject named "sub2"
 ```
 
 ### Working in Continuous Integration
@@ -263,9 +258,9 @@ gradle release -Prelease.useAutomaticVersion=true -Prelease.releaseVersion=1.0.0
 
 To ask questions please use stackoverflow or github issues.
 
-* GitHub Issues: [https://github.com/F43nd1r//gradle-release/issues/new](https://github.com/researchgate/gradle-release/issues/new)
+* [GitHub Issues](https://github.com/researchgate/gradle-release/issues/new)
 
 To report bugs, please use the GitHub project.
 
-* Project Page: [https://github.com/F43nd1r//gradle-release](https://github.com/researchgate/gradle-release)
-* Reporting Bugs: [https://github.com/F43nd1r//gradle-release/issues](https://github.com/researchgate/gradle-release/issues)
+* [Project Page](https://github.com/researchgate/gradle-release)
+* [Reporting Bugs](https://github.com/researchgate/gradle-release/issues)

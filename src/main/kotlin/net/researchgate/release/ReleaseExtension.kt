@@ -19,7 +19,6 @@ import org.gradle.api.Action
 import org.gradle.api.Project
 import org.gradle.api.Task
 import java.util.concurrent.Callable
-import java.util.regex.Matcher
 
 open class ReleaseExtension(private val project: Project) {
     var failOnCommitNeeded = true
@@ -39,7 +38,7 @@ open class ReleaseExtension(private val project: Project) {
     var versionProperties: List<String> = emptyList()
     var buildTasks: List<Any> = listOf(Callable<List<Task>> { project.allprojects.mapNotNull { it.tasks.findByName("build") } })
     var ignoredSnapshotDependencies: List<String> = emptyList()
-    var versionPatterns: Map<String, (Matcher) -> String> = mapOf("""(\d+)([^\d]*$)""" to { m -> m.replaceAll("${(m.group(1).toInt()) + 1}${m.group(2)}") })
+    var versionPatterns: Map<String, (MatchResult) -> String> = mapOf("""(\d+)([^\d]*$)""" to { m -> "${m.groupValues[1].toInt() + 1}${m.groupValues[2]}" })
     var scmAdapters: List<Class<out BaseScmAdapter>> = listOf(GitAdapter::class.java)
     var git = GitAdapter.GitConfig()
 

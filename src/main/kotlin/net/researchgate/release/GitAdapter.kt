@@ -23,20 +23,30 @@ import java.util.regex.Pattern
 class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(project, attributes) {
     companion object {
         const val LINE = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        const val UNCOMMITTED = "uncommitted"
-        const val UNVERSIONED = "unversioned"
-        const val AHEAD = "ahead"
-        const val BEHIND = "behind"
         val BASIC_ERROR_PATTERNS = listOf("error: ", "fatal: ")
     }
 
-    private var workingBranch: String? = null
-    private var releaseBranch: String? = null
-    private val push = mutableListOf<List<String>>()
-    private var head: String? = null
-    private var tag: String? = null
+    private data class LocalStatus(val uncommitted: List<String>, val unversioned: List<String>)
+    private data class RemoteStatus(val ahead: Int, val behind: Int)
 
+    private lateinit var workingBranch: String
+    private lateinit var releaseBranch: String
     private lateinit var workingDirectory: File
+
+    /**
+     * tags/commits created by the release process which are yet to be pushed
+     */
+    private val push = mutableListOf<List<String>>()
+
+    /**
+     * the latest commit before the release process started
+     */
+    private lateinit var head: String
+
+    /**
+     * the tag created by the release process, if any
+     */
+    private var tag: String? = null
 
     class GitConfig {
         var requireBranch: String? = "master"
@@ -48,133 +58,108 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
     }
 
     override fun isSupported(directory: File): Boolean {
-        if (directory.list()?.contains(".git") != true) {
-            return directory.parentFile?.let { isSupported(it) } ?: false
-        }
-        workingDirectory = directory
-        return true
+        return directory.list()?.contains(".git")?.also { workingDirectory = directory } ?: directory.parentFile?.let { isSupported(it) } ?: false
     }
 
     override fun init() {
-        workingBranch = gitCurrentBranch()
-        releaseBranch = extension.pushReleaseVersionBranch ?: workingBranch
         push.clear()
+        workingBranch = gitCurrentBranch()
         head = gitCurrentCommit()
+        releaseBranch = extension.pushReleaseVersionBranch ?: workingBranch
         tag = null
         extension.git.requireBranch?.let {
-            if (!Regex(it).matches(workingBranch!!)) {
-                throw GradleException("Current Git branch is \"$workingBranch\" and not \"${extension.git.requireBranch}\".")
+            if (!Regex(it).matches(workingBranch)) {
+                throw GradleException("""Current Git branch is "$workingBranch" and not "${extension.git.requireBranch}".""")
             }
         }
     }
 
     override fun checkCommitNeeded() {
         val status = gitStatus()
-        if (status[UNVERSIONED] != null) {
-            warnOrThrow(extension.failOnUnversionedFiles, listOf("You have unversioned files:", LINE, *status.getValue(UNVERSIONED).toTypedArray(), LINE).joinToString("\n"))
+        if (status.unversioned.isNotEmpty()) {
+            warnOrThrow(extension.failOnUnversionedFiles, listOf("You have unversioned files:", LINE, *status.unversioned.toTypedArray(), LINE).joinToString("\n"))
         }
-        if (status[UNCOMMITTED] != null) {
-            warnOrThrow(extension.failOnCommitNeeded, listOf("You have uncommitted files:", LINE, *status.getValue(UNCOMMITTED).toTypedArray(), LINE).joinToString("\n"))
+        if (status.uncommitted.isNotEmpty()) {
+            warnOrThrow(extension.failOnCommitNeeded, listOf("You have uncommitted files:", LINE, *status.uncommitted.toTypedArray(), LINE).joinToString("\n"))
         }
     }
 
     override fun checkUpdateNeeded() {
-        exec("git", "remote", "update", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
+        executor.exec("git", "remote", "update", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
         val status = gitRemoteStatus()
-        if (status[AHEAD] != 0) {
-            warnOrThrow(extension.failOnPublishNeeded, "You have ${status[AHEAD]} local change(s) to push.")
+        if (status.ahead != 0) {
+            warnOrThrow(extension.failOnPublishNeeded, "You have ${status.ahead} local change(s) to push.")
         }
-        if (status[BEHIND] != 0) {
-            warnOrThrow(extension.failOnUpdateNeeded, "You have ${status[BEHIND]} remote change(s) to pull.")
+        if (status.behind != 0) {
+            warnOrThrow(extension.failOnUpdateNeeded, "You have ${status.behind} remote change(s) to pull.")
         }
     }
 
     override fun createReleaseTag(message: String) {
         val tagName = tagName()
-        log.info("Tag for version ${project.version} is $tagName")
-        val params = mutableListOf("git", "tag", "-a", tagName, "-m", message)
-        if (extension.git.signTag) {
-            params.add("-s")
-        }
-        exec(*params.toTypedArray(), directory = workingDirectory, errorMessage = "Duplicate tag [$tagName] or signing error",
-                errorPatterns = listOf("already exists", "failed to sign"))
+        executor.exec("git", "tag", "-a", tagName, "-m", message, *optionalArg(extension.git.signTag, "-s"), directory = workingDirectory,
+                errorPatterns = listOf("already exists", "failed to sign"),
+                errorMessage = "Duplicate tag [$tagName] or signing error")
         tag = tagName
-        push.add(listOf(extension.git.pushToRemote ?: "", tagName) + extension.git.pushOptions)
+        push.add(listOfNotNull(extension.git.pushToRemote, tagName))
     }
 
     override fun commit(message: String) {
-        val command = mutableListOf("git", "commit", "-m", message)
-        if (extension.git.commitVersionFileOnly) {
-            command.add(project.file(extension.versionPropertyFile).canonicalPath)
-        } else {
-            command.add("-a")
-        }
-
-        exec(*command.toTypedArray(), directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
-
+        executor.exec("git", "commit", "-m", message, if (extension.git.commitVersionFileOnly) project.file(extension.versionPropertyFile).canonicalPath else "-a",
+                directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
         val branch = (extension.git.pushToBranchPrefix?.let { "HEAD:$it" } ?: "") + gitCurrentBranch()
-        push.add(listOfNotNull(extension.git.pushToRemote, branch) + extension.git.pushOptions)
+        push.add(listOfNotNull(extension.git.pushToRemote, branch))
     }
 
     override fun add(file: File) {
-        exec("git", "add", file.path, directory = workingDirectory, errorMessage = "Error adding file ${file.name}", errorPatterns = BASIC_ERROR_PATTERNS)
+        executor.exec("git", "add", file.canonicalPath, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS, errorMessage = "Error adding file ${file.name}")
     }
 
     override fun push() {
-        if (shouldPush()) {
-            for (command in push) {
-                exec("git", "push", "--porcelain", *command.toTypedArray(), directory = workingDirectory, errorMessage = "Failed to push to remote: $command",
-                        errorPatterns = BASIC_ERROR_PATTERNS + "[rejected]")
-            }
+        if (shouldPush()) push.forEach {
+            executor.exec("git", "push", "--porcelain", *(it + extension.git.pushOptions).toTypedArray(), directory = workingDirectory,
+                    errorPatterns = BASIC_ERROR_PATTERNS + "[rejected]", errorMessage = "Failed to push to remote: $it")
         }
     }
 
     override fun revert() {
-        if (head != null && head != gitCurrentCommit()) {
+        val gitCurrentCommit = gitCurrentCommit()
+        if (::head.isInitialized && head != gitCurrentCommit) {
             log.info("Reverting commits...")
-            exec("git", "reset", "--soft", head!!, directory = workingDirectory, errorMessage = "Error reverting commits made by the release plugin.")
-            head = null
+            executor.exec("git", "reset", "--soft", head, directory = workingDirectory, errorMessage = "Failed to revert commits made by the release plugin.")
+            head = gitCurrentCommit
         }
-        if (tag != null) {
+        tag?.let {
             log.info("Reverting tag...")
-            exec("git", "tag", "--delete", tag!!, directory = workingDirectory, errorMessage = "Error reverting tag made by the release plugin.")
+            executor.exec("git", "tag", "--delete", it, directory = workingDirectory, errorMessage = "Failed to revert tag made by the release plugin.")
             tag = null
         }
-        // Revert changes on gradle.properties
-        log.info("Reverting property file")
-        exec("git", "checkout", "HEAD", "--", findPropertiesFile().name, directory = workingDirectory, errorMessage = "Error reverting changes made by the release plugin.")
+        log.info("Reverting property file...")
+        executor.exec("git", "checkout", "HEAD", "--", propertiesFile.name, directory = workingDirectory, errorMessage = "Failed to revert changes made by the release plugin.")
     }
 
-    override fun checkoutMergeToReleaseBranch() {
-        checkoutMerge(workingBranch!!, releaseBranch!!)
-    }
+    override fun checkoutMergeToReleaseBranch() = checkoutMerge(workingBranch, releaseBranch)
 
-    override fun checkoutMergeFromReleaseBranch() {
-        checkoutMerge(releaseBranch!!, workingBranch!!)
-    }
+    override fun checkoutMergeFromReleaseBranch() = checkoutMerge(releaseBranch, workingBranch)
 
     private fun checkoutMerge(fromBranch: String, toBranch: String) {
-        exec("git", "fetch", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
-        exec("git", "checkout", toBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
-        exec("git", "merge", "--no-ff", "--no-commit", fromBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS + "CONFLICT")
+        executor.exec("git", "fetch", directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
+        executor.exec("git", "checkout", toBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS)
+        executor.exec("git", "merge", "--no-ff", "--no-commit", fromBranch, directory = workingDirectory, errorPatterns = BASIC_ERROR_PATTERNS + "CONFLICT")
     }
 
     private fun shouldPush(): Boolean {
-        if (extension.git.pushToRemote != null) {
-            val shouldPush = exec("git", "remote", directory = workingDirectory).lines().any { line ->
-                val matcher = Pattern.compile("^\\s*(.*)\\s*$").matcher(line)
-                matcher.matches() && matcher.group(1) == extension.git.pushToRemote
-            }
-            if (!shouldPush && extension.git.pushToRemote != "origin") {
+        return extension.git.pushToRemote?.let { remote ->
+            val shouldPush = executor.exec("git", "remote", directory = workingDirectory).lines().any { Regex("^\\s*(.*)\\s*$").matchEntire(it)?.groupValues[1] == remote }
+            if (!shouldPush && remote != "origin") {
                 throw GradleException("Could not push to remote ${extension.git.pushToRemote} as repository has no such remote")
             }
-            return shouldPush
-        }
-        return false
+            shouldPush
+        } ?: false
     }
 
     private fun gitCurrentBranch(): String {
-        val matches = exec("git", "branch", "--no-color", directory = workingDirectory).lines().filter { it.matches(Regex("""\s*\*.*""")) }
+        val matches = executor.exec("git", "branch", "--no-color", directory = workingDirectory).lines().filter { it.matches(Regex("""\s*\*.*""")) }
         if (matches.isNotEmpty()) {
             return matches[0].trim().replace(Regex("""^\*\s+"""), "")
         } else {
@@ -182,23 +167,21 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
         }
     }
 
-    private fun gitStatus(): Map<String, List<String>> {
-        return exec("git", "status", "--porcelain", directory = workingDirectory).lines().groupBy {
-            when {
-                it.matches(Regex("""^\s*\?{2}.*""")) -> UNVERSIONED
-                it.isNotBlank() -> UNCOMMITTED
-                else -> "other"
-            }
-        }
+    private fun gitStatus(): LocalStatus {
+        return executor.exec("git", "status", "--porcelain", directory = workingDirectory)
+                .lines()
+                .filter { it.isNotBlank() }
+                .partition { it.matches(Regex("""^\s*\?{2}.*""")) /* unversioned files are noted on lines starting with "??" */ }
+                .let { LocalStatus(unversioned = it.first, uncommitted = it.second) }
     }
 
     private fun gitCurrentCommit(): String {
-        return exec("git", "rev-parse", "--verify", "--porcelain", "HEAD", directory = workingDirectory).trim()
+        return executor.exec("git", "rev-parse", "--verify", "--porcelain", "HEAD", directory = workingDirectory).trim()
     }
 
-    private fun gitRemoteStatus(): Map<String, Int> {
-        val branchStatus = exec("git", "status", "--porcelain", "-b", directory = workingDirectory).lines()[0]
-        return mapOf(AHEAD to (Pattern.compile(""".*ahead (\d+).*""").matcher(branchStatus).takeIf { it.matches() }?.group(1)?.toInt() ?: 0),
-                BEHIND to (Pattern.compile(""".*behind (\d+).*""").matcher(branchStatus).takeIf { it.matches() }?.group(1)?.toInt() ?: 0))
+    private fun gitRemoteStatus(): RemoteStatus {
+        val branchStatus = executor.exec("git", "status", "--porcelain", "-b", directory = workingDirectory).lines()[0]
+        return RemoteStatus(ahead = Regex(""".*ahead (\d+).*""").matchEntire(branchStatus)?.groupValues[1]?.toInt() ?: 0,
+                behind = Regex(""".*behind (\d+).*""").matchEntire(branchStatus)?.groupValues[1]?.toInt() ?: 0)
     }
 }

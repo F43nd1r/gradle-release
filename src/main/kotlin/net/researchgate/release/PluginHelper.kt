@@ -16,58 +16,52 @@
 package net.researchgate.release
 
 import net.researchgate.release.cli.Executor
-import org.apache.tools.ant.BuildException
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.io.IOException
 
 open class PluginHelper {
+    protected lateinit var project: Project
+    protected lateinit var extension: ReleaseExtension
+    protected val executor: Executor by lazy { Executor(log) }
+    protected var attributes: Attributes = Attributes()
+
     /**
-     * Retrieves SLF4J [Logger] instance.
-     *
+     * SLF4J [Logger] instance.
      *
      * The logger is taken from the [Project] instance if it's initialized already
      * or from SLF4J [LoggerFactory] if it's not.
      *
-     * @return SLF4J [Logger] instance
      */
-    val log: Logger
+    protected val log: Logger
         get() = this.project.logger ?: LoggerFactory.getLogger(this.javaClass)
 
-    fun useAutomaticVersion(): Boolean = findProperty("release.useAutomaticVersion") == "true"
+    protected val useAutomaticVersion: Boolean by lazy { findProperty("release.useAutomaticVersion") == "true" }
 
-    /**
-     * Executes command specified and retrieves its "stdout" output.
-     *
-     * @param commands     commands to execute
-     * @return command "stdout" output
-     */
-    fun exec(vararg commands: String, directory: File = project.rootDir, env: Map<*, *> = emptyMap<Any, Any>(), failOnStdErr: Boolean = false,
-             errorPatterns: List<String> = emptyList(), errorMessage: String? = null): String {
-        return executor.exec(*commands, directory = directory, env = env, failOnStdErr = failOnStdErr, errorPatterns = errorPatterns, errorMessage = errorMessage)
-    }
+    protected val isVersionDefined: Boolean
+        get() = project.version.toString().isNotEmpty() && Project.DEFAULT_VERSION != project.version
 
-    fun findPropertiesFile(): File {
+    protected val propertiesFile: File by lazy {
         val propertiesFile = project.file(extension.versionPropertyFile)
         if (!propertiesFile.isFile) {
             if (!isVersionDefined) {
                 project.version = getReleaseVersion("1.0.0")
             }
-            if (!useAutomaticVersion() && promptYesOrNo("Do you want to use SNAPSHOT versions in between releases")) {
+            if (!useAutomaticVersion && promptYesOrNo("Do you want to use SNAPSHOT versions in between releases")) {
                 attributes.usesSnapshot = true
             }
-            if (useAutomaticVersion() || promptYesOrNo("[${propertiesFile.canonicalPath}] not found, create it with version = ${project.version}")) {
+            if (useAutomaticVersion || promptYesOrNo("[${propertiesFile.canonicalPath}] not found, create it with version = ${project.version}")) {
                 writeVersion(propertiesFile, "version", project.version)
                 attributes.propertiesFileCreated = true
             } else {
-                log.debug("[${propertiesFile.canonicalPath}] was not found, and user opted out of it being created. Throwing exception.")
                 throw GradleException(
                         """[${propertiesFile.canonicalPath}] not found and you opted out of it being created, please create it manually and specify the version property.""")
             }
         }
-        return propertiesFile
+        propertiesFile
     }
 
     private fun writeVersion(file: File, key: String?, version: Any?) {
@@ -77,13 +71,10 @@ open class PluginHelper {
             } else {
                 file.writeText(file.readText().lines().joinToString("\n") { it.replace(Regex("""^(\s*)$key((\s*[=|:]\s*)|(\s+)).+$"""), """$1$key$2$version""") })
             }
-        } catch (e: BuildException) {
+        } catch (e: IOException) {
             throw GradleException("Unable to write version property.", e)
         }
     }
-
-    val isVersionDefined: Boolean
-        get() = project.version.toString().isNotEmpty() && Project.DEFAULT_VERSION != project.version
 
     fun warnOrThrow(doThrow: Boolean, message: String) {
         if (doThrow) {
@@ -95,11 +86,11 @@ open class PluginHelper {
 
     fun tagName(): String = extension.tagTemplate.replace(Regex.fromLiteral("\$version"), project.version.toString()).replace(Regex.fromLiteral("\$name"), project.name)
 
-    fun findProperty(key: String): String? = System.getProperty(key) ?: if (project.hasProperty(key)) project.property(key)!!.toString() else null
+    fun findProperty(key: String): String? = System.getProperty(key) ?: project.findProperty(key)?.toString()
 
     fun getReleaseVersion(candidateVersion: String = project.version.toString()): String {
-        val releaseVersion = findProperty("release.releaseVersion")
-        return getIf(!useAutomaticVersion()) { readLine("This release version: [${releaseVersion ?: candidateVersion}]") } ?: releaseVersion ?: candidateVersion
+        val releaseVersion = findProperty("release.releaseVersion") ?: candidateVersion
+        return getIf(!useAutomaticVersion) { readLine("This release version: [${releaseVersion}]") } ?: releaseVersion
     }
 
     /**
@@ -114,16 +105,9 @@ open class PluginHelper {
             project.version = newVersion
             attributes.versionModified = true
             project.subprojects { it.version = newVersion }
-            val versionProperties: List<String> = extension.versionProperties.map { it } + "version"
-            val propertiesFile = findPropertiesFile()
-            versionProperties.forEach { writeVersion(propertiesFile, it, project.version) }
+            (extension.versionProperties.map { it } + "version").forEach { writeVersion(propertiesFile, it, project.version) }
         }
     }
-
-    protected lateinit var project: Project
-    protected lateinit var extension: ReleaseExtension
-    private val executor: Executor by lazy { Executor(log) }
-    protected var attributes: Attributes = Attributes()
 
     companion object {
         /**
@@ -135,8 +119,8 @@ open class PluginHelper {
         @JvmStatic
         protected fun readLine(message: String): String? {
             val fullMessage = "$PROMPT $message"
-            if (System.console() != null) {
-                return System.console().readLine(fullMessage)?.ifBlank { null }
+            System.console()?.run {
+                return readLine(fullMessage)?.ifBlank { null }
             }
             println("$fullMessage (WAITING FOR INPUT BELOW)")
             return System.`in`.bufferedReader().readLine()?.ifBlank { null }

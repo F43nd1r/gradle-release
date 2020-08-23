@@ -22,12 +22,14 @@ import org.gradle.api.Task
 import org.gradle.api.tasks.GradleBuild
 import org.gradle.api.tasks.TaskProvider
 import java.util.*
-import java.util.regex.Pattern
+import java.util.concurrent.Callable
 
 class ReleasePlugin : PluginHelper(), Plugin<Project> {
     companion object {
         const val RELEASE_GROUP = "Release"
     }
+
+    private lateinit var scmAdapter: BaseScmAdapter
 
     private fun registerTask(name: String, description: String, vararg dependencies: Any, onlyIf: () -> Boolean = { true }, action: () -> Unit = {}): TaskProvider<Task> {
         return project.tasks.register(name) {
@@ -60,13 +62,15 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val confirmReleaseVersion = registerTask("confirmReleaseVersion", "Prompts user for this release version. Allows for alpha or pre releases.") { confirmReleaseVersion() }
         val checkSnapshotDependencies = registerTask("checkSnapshotDependencies", "Checks to see if your project has any SNAPSHOT dependencies.") { checkSnapshotDependencies() }
         val beforeReleaseBuild = registerTask("beforeReleaseBuild", "Runs immediately before the build when doing a release")
-        val runReleaseBuild = registerTask("runReleaseBuild", "Runs the build when doing a release", beforeReleaseBuild, *extension.buildTasks.toTypedArray())
-        val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release", runReleaseBuild)
-        val runBuildTasks = project.tasks.register("runBuildTasks", GradleBuild::class.java) {
-            it.group = RELEASE_GROUP
-            it.description = "Runs the build process in a separate gradle run."
-            it.startParameter = project.gradle.startParameter.newInstance()
-            it.tasks = listOf(beforeReleaseBuild.get().path) + runReleaseBuild.get().path + afterReleaseBuild.get().path
+        val runReleaseBuild = registerTask("runReleaseBuild", "Runs the build when doing a release", Callable<List<Any>> { extension.buildTasks })
+        val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release")
+        val buildTasks = listOf(beforeReleaseBuild, runReleaseBuild, afterReleaseBuild)
+        buildTasks.enforceTaskOrder()
+        val runBuildTasks = project.tasks.register("runBuildTasks", GradleBuild::class.java) { task ->
+            task.group = RELEASE_GROUP
+            task.description = "Runs the build process in a separate gradle run."
+            task.startParameter = project.gradle.startParameter.newInstance()
+            task.tasks = buildTasks.map { it.get().path }
         }
         val preTagCommit = registerTask("preTagCommit", "Commits any changes made by the Release plugin - eg. If the unSnapshotVersion task was executed",
                 initScmAdapter) { preTagCommit() }
@@ -79,9 +83,8 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val push = registerTask("push", "Pushes all release commits and tags to your SCM", initScmAdapter) { push() }
         val tasks = listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion, confirmReleaseVersion,
                 checkSnapshotDependencies, preTagCommit, createReleaseTag, runBuildTasks, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
-        tasks.forEachIndexed { index, task -> task.configure { it.mustRunAfter(*tasks.subList(0, index).toTypedArray()) } }
-
-        registerTask("release", "Verify project, release, and update version to next.", *tasks.toTypedArray())
+        tasks.enforceTaskOrder()
+        registerTask("release", "Verify project, release, and update version to next.", tasks)
         project.gradle.taskGraph.afterTask { task ->
             if (task.state.failure != null && project.gradle.taskGraph.allTasks.any { it.name == "release" }) {
                 kotlin.runCatching { createScmAdapter() }
@@ -94,6 +97,8 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
             }
         }
     }
+
+    private fun List<TaskProvider<out Task>>.enforceTaskOrder() = forEachIndexed { index, task -> task.configure { it.mustRunAfter(subList(0, index)) } }
 
     private fun createScmAdapter() {
         if (!::scmAdapter.isInitialized) {
@@ -126,26 +131,19 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
     private fun checkBadCombination() {
         if (extension.pushReleaseVersionBranch != null && !extension.failOnCommitNeeded) {
             log.warn("/!\\Warning/!\\")
-            log.warn("It is strongly discouraged to set failOnCommitNeeded to false with pushReleaseVersionBranch is enabled.")
+            log.warn("It is strongly discouraged to set failOnCommitNeeded to false when pushReleaseVersionBranch is enabled.")
             log.warn("Merging with an uncleaned working directory will lead to unexpected results.")
         }
     }
 
     private fun checkSnapshotDependencies() {
-        var message = ""
-        project.allprojects {
+        project.allprojects.mapNotNull {
             val snapshotDependencies = (project.configurations + project.buildscript.configurations).flatMap { configuration ->
                 configuration.dependencies.filter { it.version?.contains("SNAPSHOT") == true && !extension.ignoredSnapshotDependencies.contains("${it.group ?: ""}:${it.name}") }
-                    .map { (it.group ?: "") + ":" + it.name + ":" + (it.version ?: "") }
+                        .map { (it.group ?: "") + ":" + it.name + ":" + (it.version ?: "") }
             }
-            if (snapshotDependencies.isNotEmpty()) {
-                message += "\n\t${project.name}: $snapshotDependencies"
-            }
-        }
-        if (message.isNotEmpty()) {
-            message = "Snapshot dependencies detected: $message"
-            warnOrThrow(extension.failOnSnapshotDependencies, message)
-        }
+            if (snapshotDependencies.isNotEmpty()) "\n\t${project.name}: $snapshotDependencies" else null
+        }.ifEmpty { null }?.joinToString(separator = "")?.let { warnOrThrow(extension.failOnSnapshotDependencies, "Snapshot dependencies detected: $it") }
     }
 
     private fun commitTag() {
@@ -171,7 +169,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         if (attributes.usesSnapshot || attributes.versionModified || attributes.propertiesFileCreated) {
             // should only be committed if the project was using a snapshot version.
             if (attributes.propertiesFileCreated) {
-                scmAdapter.add(findPropertiesFile())
+                scmAdapter.add(propertiesFile)
             }
             scmAdapter.commit(message = "${extension.preCommitText} ${extension.preTagCommitMessage} '${tagName()}'.".trim())
         }
@@ -181,9 +179,9 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         checkPropertiesFile()
         val version = project.version.toString()
         for ((pattern, createNextVersion) in extension.versionPatterns) {
-            val matcher = Pattern.compile(pattern).matcher(version)
-            if (matcher.find()) {
-                val nextVersion = createNextVersion(matcher) + (if(attributes.usesSnapshot) extension.snapshotSuffix else "")
+            val regex = Regex(pattern)
+            if (regex.containsMatchIn(version)) {
+                val nextVersion = version.replace(regex, createNextVersion) + (if (attributes.usesSnapshot) extension.snapshotSuffix else "")
                 updateVersionProperty(getNextVersion(nextVersion))
                 return
             }
@@ -192,12 +190,8 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
     }
 
     private fun getNextVersion(candidateVersion: String): String {
-        val nextVersion = findProperty("release.newVersion")
-        return if (useAutomaticVersion()) {
-            nextVersion ?: candidateVersion
-        } else {
-            readLine("Enter the next version (current one released as [${project.version}]): [${nextVersion ?: candidateVersion}]") ?: nextVersion ?: candidateVersion
-        }
+        val nextVersion = findProperty("release.newVersion") ?: candidateVersion
+        return getIf(!useAutomaticVersion) { readLine("Enter the next version (current one released as [${project.version}]): [${nextVersion}]") } ?: nextVersion
     }
 
     private fun commitNewVersion() {
@@ -209,7 +203,6 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
     }
 
     private fun checkPropertiesFile() {
-        val propertiesFile = findPropertiesFile()
         if (!propertiesFile.canRead() || !propertiesFile.canWrite()) {
             throw GradleException("Unable to update version property. Please check file permissions.")
         }
@@ -236,6 +229,4 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
             it.getConstructor(Project::class.java, Attributes::class.java).newInstance(project, attributes) as BaseScmAdapter
         }.firstOrNull { it.isSupported(projectPath) } ?: throw GradleException("No supported Adapter could be found. Are [$projectPath] or its parents valid scm directories?")
     }
-
-    private lateinit var scmAdapter: BaseScmAdapter
 }

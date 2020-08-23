@@ -15,3 +15,5 @@ inline fun <T> getIf(shouldGet: Boolean, get: () -> T): T? = if(shouldGet) get()
 inline fun <reified T> optionalArg(shouldAddArg: Boolean, arg: T): Array<T> = if(shouldAddArg) arrayOf(arg) else emptyArray()
 
 operator fun <T> List<T>?.get(index: Int) : T? = this?.get(index)
+
+fun Boolean.falseToNull() : Boolean? = if(this) true else null

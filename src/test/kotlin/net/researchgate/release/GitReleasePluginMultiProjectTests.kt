@@ -38,7 +38,7 @@ class GitReleasePluginMultiProjectTests : BaseGitTest() {
     }
 
     @Test
-    internal fun `subproject should work with git beeing in parentProject`() {
+    internal fun `subproject should work with git being in parentProject`() {
         runGradleTask(subProject, "checkUpdateNeeded")
     }
 

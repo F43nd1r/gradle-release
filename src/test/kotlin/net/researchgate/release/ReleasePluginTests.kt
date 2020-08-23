@@ -185,7 +185,7 @@ class ReleasePluginTests {
         File(testDir, "gradle.properties").writeText("version=$currentVersion")
         buildFile.appendText("""
             release {
-                versionPatterns = mapOf("(\\d+)([^\\d]*|[-\\+].*)${'$'}" to { m -> m.replaceAll("${'$'}{(m.group(1).toInt()) + 1}${'$'}{m.group(2)}") })
+                versionPatterns = mapOf("(\\d+)([^\\d]*|[-\\+].*)${'$'}" to { m -> "${'$'}{(m.groupValues[1].toInt()) + 1}${'$'}{m.groupValues[2]}" })
             }
             tasks.register("getVersion") {
                 dependsOn("updateVersion")

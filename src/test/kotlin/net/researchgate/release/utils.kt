@@ -81,6 +81,10 @@ fun File.addTestAdapter() {
                 override fun push() {}
 
                 override fun revert() {}
+                
+                override fun checkoutMergeToReleaseBranch() {}
+                
+                override fun checkoutMergeFromReleaseBranch() {}
             }
             
             release {

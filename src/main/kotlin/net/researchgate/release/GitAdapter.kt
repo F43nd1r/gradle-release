@@ -18,7 +18,6 @@ package net.researchgate.release
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import java.io.File
-import java.util.regex.Pattern
 
 class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(project, attributes) {
     companion object {
@@ -58,7 +57,7 @@ class GitAdapter(project: Project, attributes: Attributes) : BaseScmAdapter(proj
     }
 
     override fun isSupported(directory: File): Boolean {
-        return directory.list()?.contains(".git")?.also { workingDirectory = directory } ?: directory.parentFile?.let { isSupported(it) } ?: false
+        return directory.list()?.contains(".git")?.falseToNull()?.also { workingDirectory = directory } ?: directory.parentFile?.let { isSupported(it) } ?: false
     }
 
     override fun init() {

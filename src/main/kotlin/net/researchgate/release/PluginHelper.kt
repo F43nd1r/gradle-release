@@ -44,7 +44,7 @@ open class PluginHelper {
     protected val isVersionDefined: Boolean
         get() = project.version.toString().isNotEmpty() && Project.DEFAULT_VERSION != project.version
 
-    protected val propertiesFile: File by lazy {
+    val propertiesFile: File by lazy {
         val propertiesFile = project.file(extension.versionPropertyFile)
         if (!propertiesFile.isFile) {
             if (!isVersionDefined) {

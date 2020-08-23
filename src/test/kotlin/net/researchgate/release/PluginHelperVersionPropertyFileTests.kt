@@ -48,7 +48,7 @@ class PluginHelperVersionPropertyFileTests {
 
     @Test
     fun `should find gradle properties by default`() {
-        expectThat(helper.findPropertiesFile().name).isEqualTo("gradle.properties")
+        expectThat(helper.propertiesFile.name).isEqualTo("gradle.properties")
     }
 
     @Test
@@ -56,7 +56,7 @@ class PluginHelperVersionPropertyFileTests {
         val file = File(testDir, "custom.properties")
         file.writeText("version=1.2")
         extension.versionPropertyFile = file.name
-        expectThat(helper.findPropertiesFile().name).isEqualTo("custom.properties")
+        expectThat(helper.propertiesFile.name).isEqualTo("custom.properties")
     }
 
     @Test

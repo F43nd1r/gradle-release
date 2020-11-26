@@ -19,7 +19,6 @@ import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
-import org.gradle.api.tasks.GradleBuild
 import org.gradle.api.tasks.TaskProvider
 import java.util.*
 import java.util.concurrent.Callable
@@ -31,7 +30,8 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
 
     private lateinit var scmAdapter: BaseScmAdapter
 
-    private fun registerTask(name: String, description: String, vararg dependencies: Any, onlyIf: () -> Boolean = { true }, action: () -> Unit = {}): TaskProvider<Task> {
+    private fun registerTask(name: String, description: String, vararg dependencies: Any, onlyIf: () -> Boolean = { true },
+                             action: () -> Unit = {}): TaskProvider<Task> {
         return project.tasks.register(name) {
             it.group = RELEASE_GROUP
             it.description = description
@@ -53,33 +53,44 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val initScmAdapter = registerTask("initScmAdapter", "Initializes the SCM plugin", createScmAdapter) { initScmAdapter() }
         val checkCommitNeeded = registerTask("checkCommitNeeded", "Checks to see if there are any added, modified, removed, or un-versioned files.",
                 initScmAdapter) { checkCommitNeeded() }
-        val checkUpdateNeeded = registerTask("checkUpdateNeeded", "Checks to see if there are any incoming or outgoing changes that haven't been applied locally.",
-                initScmAdapter) { checkUpdateNeeded() }
+        val checkUpdateNeeded =
+                registerTask("checkUpdateNeeded", "Checks to see if there are any incoming or outgoing changes that haven't been applied locally.",
+                        initScmAdapter) { checkUpdateNeeded() }
         val checkoutMergeToReleaseBranch = registerTask("checkoutMergeToReleaseBranch",
                 "Checkout to the release branch, and merge modifications from the main branch in working tree.",
                 initScmAdapter, onlyIf = { extension.pushReleaseVersionBranch != null }) { checkoutAndMergeToReleaseBranch() }
-        val unSnapshotVersion = registerTask("unSnapshotVersion", "Removes the snapshot suffix (eg. \"-SNAPSHOT\") from your project's current version.") { unSnapshotVersion() }
-        val confirmReleaseVersion = registerTask("confirmReleaseVersion", "Prompts user for this release version. Allows for alpha or pre releases.") { confirmReleaseVersion() }
-        val checkSnapshotDependencies = registerTask("checkSnapshotDependencies", "Checks to see if your project has any SNAPSHOT dependencies.") { checkSnapshotDependencies() }
+        val unSnapshotVersion = registerTask("unSnapshotVersion",
+                "Removes the snapshot suffix (eg. \"-SNAPSHOT\") from your project's current version.") { unSnapshotVersion() }
+        val confirmReleaseVersion =
+                registerTask("confirmReleaseVersion", "Prompts user for this release version. Allows for alpha or pre releases.") { confirmReleaseVersion() }
+        val checkSnapshotDependencies =
+                registerTask("checkSnapshotDependencies", "Checks to see if your project has any SNAPSHOT dependencies.") { checkSnapshotDependencies() }
         val beforeReleaseBuild = registerTask("beforeReleaseBuild", "Runs immediately before the build when doing a release")
         val runReleaseBuild = registerTask("runReleaseBuild", "Runs the build when doing a release", Callable<List<Any>> { extension.buildTasks })
         val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release")
         val preTagCommit = registerTask("preTagCommit", "Commits any changes made by the Release plugin - eg. If the unSnapshotVersion task was executed",
                 initScmAdapter) { preTagCommit() }
-        val createReleaseTag = registerTask("createReleaseTag", "Creates a tag in SCM for the current (un-snapshotted) version.", initScmAdapter) { commitTag() }
+        val createReleaseTag =
+                registerTask("createReleaseTag", "Creates a tag in SCM for the current (un-snapshotted) version.", initScmAdapter) { commitTag() }
         val checkoutMergeFromReleaseBranch = registerTask("checkoutMergeFromReleaseBranch",
                 "Checkout to the main branch, and merge modifications from the release branch in working tree.", initScmAdapter,
                 onlyIf = { extension.pushReleaseVersionBranch != null }) { checkoutAndMergeFromReleaseBranch() }
         val updateVersion = registerTask("updateVersion", "Prompts user for the next version. Does it's best to supply a smart default.") { updateVersion() }
         val commitNewVersion = registerTask("commitNewVersion", "Commits the version update to your SCM", initScmAdapter) { commitNewVersion() }
         val push = registerTask("push", "Pushes all release commits and tags to your SCM", initScmAdapter) { push() }
-        val tasks = listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion, confirmReleaseVersion,
-                checkSnapshotDependencies, preTagCommit, createReleaseTag, beforeReleaseBuild, runReleaseBuild, afterReleaseBuild, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
+        val tasks = listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion,
+                confirmReleaseVersion,
+                checkSnapshotDependencies, preTagCommit, createReleaseTag, beforeReleaseBuild, runReleaseBuild, afterReleaseBuild,
+                checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
         tasks.enforceTaskOrder()
         registerTask("release", "Verify project, release, and update version to next.", tasks)
         project.gradle.taskGraph.whenReady { graph ->
-            graph.getDependencies(runReleaseBuild.get()).forEach { it.mustRunAfter(beforeReleaseBuild) }
-            graph.getDependencies(afterReleaseBuild.get()).forEach { it.mustRunAfter(runReleaseBuild) }
+            if (graph.hasTask(runReleaseBuild.get())) {
+                graph.getDependencies(runReleaseBuild.get()).forEach { it.mustRunAfter(beforeReleaseBuild) }
+            }
+            if (graph.hasTask(afterReleaseBuild.get())) {
+                graph.getDependencies(afterReleaseBuild.get()).forEach { it.mustRunAfter(runReleaseBuild) }
+            }
         }
         project.gradle.taskGraph.afterTask { task ->
             if (task.state.failure != null && project.gradle.taskGraph.allTasks.any { it.name == "release" }) {
@@ -135,7 +146,9 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
     private fun checkSnapshotDependencies() {
         project.allprojects.mapNotNull {
             val snapshotDependencies = (project.configurations + project.buildscript.configurations).flatMap { configuration ->
-                configuration.dependencies.filter { it.version?.contains("SNAPSHOT") == true && !extension.ignoredSnapshotDependencies.contains("${it.group ?: ""}:${it.name}") }
+                configuration.dependencies.filter {
+                    it.version?.contains("SNAPSHOT") == true && !extension.ignoredSnapshotDependencies.contains("${it.group ?: ""}:${it.name}")
+                }
                         .map { (it.group ?: "") + ":" + it.name + ":" + (it.version ?: "") }
             }
             if (snapshotDependencies.isNotEmpty()) "\n\t${project.name}: $snapshotDependencies" else null
@@ -187,7 +200,8 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
 
     private fun getNextVersion(candidateVersion: String): String {
         val nextVersion = findProperty("release.newVersion") ?: candidateVersion
-        return getIf(!useAutomaticVersion) { readLine("Enter the next version (current one released as [${project.version}]): [${nextVersion}]") } ?: nextVersion
+        return getIf(!useAutomaticVersion) { readLine("Enter the next version (current one released as [${project.version}]): [${nextVersion}]") }
+                ?: nextVersion
     }
 
     private fun commitNewVersion() {
@@ -223,6 +237,7 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         return extension.scmAdapters.map {
             assert(BaseScmAdapter::class.java.isAssignableFrom(it))
             it.getConstructor(Project::class.java, Attributes::class.java).newInstance(project, attributes) as BaseScmAdapter
-        }.firstOrNull { it.isSupported(projectPath) } ?: throw GradleException("No supported Adapter could be found. Are [$projectPath] or its parents valid scm directories?")
+        }.firstOrNull { it.isSupported(projectPath) } ?: throw GradleException(
+                "No supported Adapter could be found. Are [$projectPath] or its parents valid scm directories?")
     }
 }

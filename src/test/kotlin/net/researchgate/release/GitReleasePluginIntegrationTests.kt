@@ -26,7 +26,7 @@ class GitReleasePluginIntegrationTests : BaseGitTest() {
     internal fun `integration test`() {
         gitAddAndCommit(localGit, "gradle.properties", "version=1.1")
         localGit.push().call()
-        runGradleTask(workTree, "release", "-Prelease.useAutomaticVersion=true", "-x", "runBuildTasks")
+        runGradleTask(workTree, "release", "-Prelease.useAutomaticVersion=true", "-x", "runReleaseBuild")
         val status = localGit.status().call()
         gitHardReset(remoteGit)
         expectThat(File(workTree, "gradle.properties").readLines()).contains("version=1.2")

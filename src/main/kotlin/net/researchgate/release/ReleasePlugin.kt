@@ -64,14 +64,6 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val beforeReleaseBuild = registerTask("beforeReleaseBuild", "Runs immediately before the build when doing a release")
         val runReleaseBuild = registerTask("runReleaseBuild", "Runs the build when doing a release", Callable<List<Any>> { extension.buildTasks })
         val afterReleaseBuild = registerTask("afterReleaseBuild", "Runs immediately after the build when doing a release")
-        val buildTasks = listOf(beforeReleaseBuild, runReleaseBuild, afterReleaseBuild)
-        buildTasks.enforceTaskOrder()
-        val runBuildTasks = project.tasks.register("runBuildTasks", GradleBuild::class.java) { task ->
-            task.group = RELEASE_GROUP
-            task.description = "Runs the build process in a separate gradle run."
-            task.startParameter = project.gradle.startParameter.newInstance()
-            task.tasks = buildTasks.map { it.get().path }
-        }
         val preTagCommit = registerTask("preTagCommit", "Commits any changes made by the Release plugin - eg. If the unSnapshotVersion task was executed",
                 initScmAdapter) { preTagCommit() }
         val createReleaseTag = registerTask("createReleaseTag", "Creates a tag in SCM for the current (un-snapshotted) version.", initScmAdapter) { commitTag() }
@@ -82,9 +74,13 @@ class ReleasePlugin : PluginHelper(), Plugin<Project> {
         val commitNewVersion = registerTask("commitNewVersion", "Commits the version update to your SCM", initScmAdapter) { commitNewVersion() }
         val push = registerTask("push", "Pushes all release commits and tags to your SCM", initScmAdapter) { push() }
         val tasks = listOf(createScmAdapter, initScmAdapter, checkCommitNeeded, checkUpdateNeeded, checkoutMergeToReleaseBranch, unSnapshotVersion, confirmReleaseVersion,
-                checkSnapshotDependencies, preTagCommit, createReleaseTag, runBuildTasks, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
+                checkSnapshotDependencies, preTagCommit, createReleaseTag, beforeReleaseBuild, runReleaseBuild, afterReleaseBuild, checkoutMergeFromReleaseBranch, updateVersion, commitNewVersion, push)
         tasks.enforceTaskOrder()
         registerTask("release", "Verify project, release, and update version to next.", tasks)
+        project.gradle.taskGraph.whenReady { graph ->
+            graph.getDependencies(runReleaseBuild.get()).forEach { it.mustRunAfter(beforeReleaseBuild) }
+            graph.getDependencies(afterReleaseBuild.get()).forEach { it.mustRunAfter(runReleaseBuild) }
+        }
         project.gradle.taskGraph.afterTask { task ->
             if (task.state.failure != null && project.gradle.taskGraph.allTasks.any { it.name == "release" }) {
                 kotlin.runCatching { createScmAdapter() }
